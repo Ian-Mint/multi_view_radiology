@@ -5,10 +5,12 @@ Created on Mon Jan 27 20:49:03 2020
 @author: Alan
 """
 
-import os
+
 import nltk
 from collections import Counter
 import pandas as pd
+import argparse
+import pickle
 
 class Vocabulary(object):
     def __init__(self):
@@ -31,7 +33,7 @@ class Vocabulary(object):
     def __len__(self):
         return len(self.word2idx)
     
-def build_vocab(img_report, threshold = 0):
+def build_vocab(imgfindings, threshold = 0):
     
     counter = Counter()
     
@@ -52,11 +54,29 @@ def build_vocab(img_report, threshold = 0):
         vocab.add_word(word)
     return vocab
     
-    
-if __name__ == '__main__':
-    path = 'preprocessing/Img_Report.csv'
-    imgfindings = pd.read_csv(path)
-    
+def main(args):
+
+    imgfindings = pd.read_csv(args.img_cap_path)
     vocab = build_vocab(imgfindings)
+    with open(args.vocab_path, 'wb') as f:
+        pickle.dump(vocab, f)
     
     print("Total vocabulary size: {}".format(len(vocab)))
+    print("Saved the vocabulary wrapper to '{}'".format(args.vocab_path))
+    
+    
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--img_cap_path', type=str, 
+                        default='preprocessing/Img_Report.csv', 
+                        help='path for image name and annotation file')
+    parser.add_argument('--vocab_path', type=str, default='vocab.pkl', 
+                        help='path for saving vocabulary wrapper')
+    parser.add_argument('--threshold', type=int, default=0, 
+                        help='minimum word count threshold')
+    args = parser.parse_args()
+    main(args)
+    
+    
+    
+    
