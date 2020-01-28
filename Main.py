@@ -22,13 +22,12 @@ def main(args):
         os.makedirs(args.model_path)
         
     # Image Preprocessing
-    transform = transforms.Compose(
-            [
-                    
-                    
-                    
-                    ])
-
+    transform = transforms.Compose([ 
+        transforms.RandomCrop(args.crop_size),
+        transforms.RandomHorizontalFlip(), 
+        transforms.ToTensor(), 
+        transforms.Normalize((0.485, 0.456, 0.406), 
+                             (0.229, 0.224, 0.225))])
 
     # Data Loader
     

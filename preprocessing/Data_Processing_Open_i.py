@@ -24,7 +24,7 @@ for filename in os.listdir(report_path):
     for i, items in enumerate(root.findall('MedlineCitation/Article/Abstract/AbstractText')):
         if i == 2: 
             findings = items.text
-        
+    
     # Image
     for i, items in enumerate(root.findall('parentImage')):
         id = items.attrib['id']
@@ -32,5 +32,6 @@ for filename in os.listdir(report_path):
         
         
 df = pd.DataFrame.from_dict(Img_Findings,orient='index', columns = ['Findings'])
+df = df.dropna()
 df.reset_index(level=0, inplace=True)
 df.to_csv('Img_Report.csv')
