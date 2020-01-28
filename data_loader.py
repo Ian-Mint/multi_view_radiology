@@ -12,9 +12,10 @@ import os
 import nltk
 
 class OpenI(Dataset):
-    def __init__(self, root, img_name_report, transform = None):
+    def __init__(self, root, vocab, img_name_report, transform = None):
         
         self.root = root
+        self.vocab = vocab
         self.img_name_report = img_name_report
         self.transform = transform
           
@@ -28,9 +29,11 @@ class OpenI(Dataset):
         if self.transform is not None:
             image = self.transform(image)
             
-        
     
-        
+        tokens = nltk.tokenize.word_tokenize(str(caption).lower())
+    
+    
+    
     def __len__(self):
         
         
