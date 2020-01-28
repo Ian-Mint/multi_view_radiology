@@ -11,7 +11,7 @@ import torch.nn as nn
 import numpy as np
 import os
 from torchvision import transforms
-from Model import Encoder, Deconder
+from Model import Encoder, Decoder
 
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
