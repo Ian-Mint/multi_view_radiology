@@ -9,10 +9,20 @@ from PIL import Image
 import pandas as pd
 import os
 #import torch.utils.data import Dataset
+#import torch
 import nltk
+
 
 class OpenI(Dataset):
     def __init__(self, root, vocab, img_name_report, transform = None):
+        """Set the path for images, captions and vocabulary wrapper.
+        
+        Args:
+            root: image directory.
+            vocab: vocabulary wrapper.
+            img_name_report: dataframe of image name vs findings
+            transform: image transformer.
+        """
         
         self.root = root
         self.vocab = vocab
@@ -21,9 +31,11 @@ class OpenI(Dataset):
           
         
     def _getitem_(self, idx):
+        """Returns one data pair (image and caption)."""
         
-        path = self.img_name_report[idx]['index']
-        caption = self.img_name_report[idx]['Findings']
+        path = self.img_name_report.iloc[idx]['index']
+        caption = self.img_name_report.iloc[idx]['Findings']
+        vocab = self.vocab
         
         image = Image.open(os.path.join(self.root, path + '.png')).convert('RGB')
         if self.transform is not None:
@@ -31,18 +43,45 @@ class OpenI(Dataset):
             
     
         tokens = nltk.tokenize.word_tokenize(str(caption).lower())
+        caption = []
+        caption.append(vocab('<start>'))
+        caption.extend([vocab(token) for token in tokens])
+        caption.append(vocab('<end>'))
+        target = torch.Tensor(caption)
     
-    
+        return image, target
     
     def __len__(self):
+        return len(self.vocab)
         
         
-        pass
         
-def get_loader(root, img_findings, transform, batch_size, shuffle, num_workers):
+def collate_fn(data):
+    """Creates mini-batch tensors from the list of tuples (image, caption)."""
     
+    data.sort(key = lambda x: len(x[1]), reverse = True)
+    images, captions = zip(*data)
+    
+    # Merge images (from tuple of 3D tensor to 4D tensor).
+    images = torch.stack(images, 0)
+    
+    # Merge captions (from tuple of 1D tensor to 2D tensor).
+    lengths = [len(cap) for cap in captions]
+    targets = torch.zeros(len(captions), max(lengths)).long()
+    
+    for idx, cap in enumerate(captions):
+        cap_end = lengths[i]
+        targets[idx, :cap_end] = cap[:cap_end]
+        
+    return images, targets, lengths
+
+    
+
+def get_loader(root, vocab, img_findings, transform, batch_size, shuffle, num_workers):
+    """Returns torch.utils.data.DataLoader for Open-i dataset."""
     imgfindings = pd.read_csv(img_findings)
     open_i = OpenI(root = root,
+                   vocab = vocab,
                    img_name_report = imgfindings,
                    transform = transform)
     
@@ -51,12 +90,12 @@ def get_loader(root, img_findings, transform, batch_size, shuffle, num_workers):
                                               batch_size = batch_size,
                                               shuffle = shuffle,
                                               num_workers = num_workers,
-                                              )
+                                              collate_fn = collate_fn)                                             )
     
     
     return data_loader
 
-
+'''
 
 if __name__ == '__main__':
     path = 'preprocessing/Img_Report.csv'
