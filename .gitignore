@@ -128,5 +128,11 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
+# config file
+config.py
+
+# data
+data/
+
 # Pycharm artifacts
 .idea/
