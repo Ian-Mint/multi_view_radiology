@@ -75,6 +75,7 @@ def collate_fn(data):
 
 def get_loader(root, vocab, img_report_path, transform, batch_size, shuffle, num_workers):
     """Returns torch.utils.data.DataLoader for Open-i dataset."""
+    
     img_findings = pd.read_csv(img_report_path)
     open_i = OpenI(root=root,
                    vocab=vocab,

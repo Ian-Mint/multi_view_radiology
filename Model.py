@@ -11,7 +11,7 @@ import torchvision.models as models
 from torch.nn.utils.rnn import pack_padded_sequence
 
 class Encoder(nn.Module):
-    def __init__(self, output_size):
+    def __init__(self, embed_size):
         '''
         Load the pretrain
         '''
@@ -38,22 +38,27 @@ class Encoder(nn.Module):
     
     
 class Decoder(nn.Module):
-    def __init__(self,vocab_size, embed_size, hidden_size):
+    def __init__(self,embed_size, hidden_size, vocab_size, num_layers):
         '''
         Build LSTM
         '''
-        super(Decode,self).__init__()
+        super(Decoder,self).__init__()
+        
+        # Embedding vocabulary
+        
         self.embed = nn.Embedding(vocab_size, embed_size)
         self.LSTM = nn.LSTM(embed_size, hidden_size, num_layers, batch_first = True)
         
+        # linear layer to find scores over vocabulary
+        self.linear = nn.Linear(hidden_size, vocab_size)
         
-    def forward(self, sentences, img_features, lengths):
+    def forward(self, img_features, sentences, lengths):
         '''
         Decode images features and generate descriptions for image
         '''
         embeddingMatrix = self.embed(sentences)
         embeddings = torch.cat((img_features.unsqueeze(1), embeddingMatrix), 1)
         packed = pack_padded_sequence(embeddings, lengths, batch_first=True) 
-        hiddens, _ = self.lstm(packed)
+        hiddens, _ = self.LSTM(packed)
         outputs = self.linear(hiddens[0])
         return outputs
