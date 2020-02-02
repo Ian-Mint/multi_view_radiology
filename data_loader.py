@@ -70,6 +70,8 @@ def collate_fn(data):
         cap_end = lengths[idx]
         targets[idx, :cap_end] = cap[:cap_end]
 
+    lengths = torch.tensor(lengths)
+    
     return images, targets, lengths
 
 
@@ -86,5 +88,6 @@ def get_loader(root, vocab, img_report_path, transform, batch_size, shuffle, num
                                               batch_size=batch_size,
                                               shuffle=shuffle,
                                               num_workers=num_workers,
-                                              collate_fn=collate_fn)
+                                              collate_fn=collate_fn,
+                                              pin_memory = True)
     return data_loader

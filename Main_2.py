@@ -11,7 +11,7 @@ import torch.nn as nn
 import numpy as np
 import os
 from torchvision import transforms
-from Model import Encoder, Decoder
+from Model_2 import Encoder, Decoder
 from data_loader import get_loader
 import pickle
 from torch.nn.utils.rnn import pack_padded_sequence
@@ -49,14 +49,20 @@ def main(args):
     
     
     # Build Models
-    encoder = Encoder(args.embed_size).to(device)
-    decoder = Decoder(args.embed_size, args.hidden_size, len(vocab), args.num_layers).to(device)
-    
+    encoder = Encoder().to(device)
+    decoder = Decoder(embed_dim = args.embed_size, decoder_dim = args.hidden_size, vocab_size = len(vocab)).to(device)
+
     # Loss and optimizer
     criterion = nn.CrossEntropyLoss()
-    params = list(decoder.parameters())+list(encoder.linear.parameters())+list(encoder.bn.parameters())
-    optimizer = torch.optim.Adam(params, lr=args.learning_rate)
     
+    encoder_optimizer = torch.optim.Adam( params = filter(lambda p: p.requires_grad, encoder.parameters()),
+                                          lr = args.encoder_lr)
+    decoder_optimizer = torch.optim.Adam( params = filter(lambda p: p.requires_grad, decoder.parameters()),
+                                          lr = args.decoder_lr)
+    
+    encoder.train()
+    decoder.train()
+
     total_step = len(data_loader)
     # Train the models
     for epoch in range(args.num_epochs):
@@ -64,27 +70,38 @@ def main(args):
             
             images = images.to(device)
             captions = captions.to(device)
-            targets = pack_padded_sequence(captions, lengths, batch_first=True)[0]
+            
 
 
             # 
             # Training
             #
-            features = encoder(images)
-            outputs = decoder(features, captions, lengths)
+            encoded_img = encoder(images)
+            scores, cap_sorted, decode_len = decoder(encoded_img, captions, lengths)
             
+            
+            # Ignore <start>
+            targets = cap_sorted[:, 1:]
+
+
+            # Remove <pad>!!!!!!
+            scores = pack_padded_sequence(scores, decode_len, batch_first = True)[0]
+            targets = pack_padded_sequence(targets, decode_len, batch_first = True)[0]
+
+             
             # optimization
-            loss = criterion(outputs, targets)
-            decoder.zero_grad()
-            encoder.zero_grad()
+            loss = criterion(scores, targets)
+            decoder_optimizer.zero_grad()
+            encoder_optimizer.zero_grad()
             loss.backward()
-            optimizer.step()
             
-            
+            # update weights
+            decoder_optimizer.step()
+            encoder_optimizer.step()
+
             #
             #  Validation
             #  bleu-4 = validation(val_loader, encoder, decoder, criterion, args)
-            
             
 
             # Print log info
@@ -179,9 +196,10 @@ if __name__ == '__main__':
     parser.add_argument('--hidden_size', type=int , default=512, help='dimension of lstm hidden states')
     parser.add_argument('--num_layers', type=int , default=1, help='number of layers in LSTM')
     
-    parser.add_argument('--num_epochs', type=int, default=5)
-    parser.add_argument('--batch_size', type=int, default=128)
+    parser.add_argument('--num_epochs', type=int, default=30)
+    parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--num_workers', type=int, default=0)
-    parser.add_argument('--learning_rate', type=float, default=0.001)
+    parser.add_argument('--encoder_lr', type=float, default=0.0001)
+    parser.add_argument('--decoder_lr', type=float, default=0.0004)
     args = parser.parse_args()
     main(args)
