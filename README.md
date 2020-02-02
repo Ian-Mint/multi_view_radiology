@@ -28,5 +28,5 @@ Root
 
 ## Execution
 ```bash
-$python Model.py
+$python Main.py
 ```
