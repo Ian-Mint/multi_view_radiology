@@ -17,13 +17,17 @@ import pickle
 from torch.nn.utils.rnn import pack_padded_sequence
 from nltk.translate.bleu_score import corpus_bleu
 from vocabulary import Vocabulary
+import pandas as pd
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def main(args):
     
-    # GPU #
-    print('CUDA? ', torch.cuda.is_available(), ',  Running on GPU: ',torch.cuda.current_device())
+    # GPU 
+    if torch.cuda.is_available():
+        print('Using GPU')
+    else:
+        print('Using CPU')
     
     # Create directory to save model
     if not os.path.exists(args.model_path):
@@ -41,12 +45,29 @@ def main(args):
     with open(args.vocab_path, 'rb') as f:
         vocab = pickle.load(f)
     
-    # Training Data Loader
-    data_loader = get_loader(args.image_dir, vocab, args.img_report_path, 
+
+    # Split data into 'Train', 'Validate'
+
+    img_name_report = pd.read_csv(args.img_report_path)
+    data_total_size = len(img_name_report)
+    print('Data Total Size:{}'.format(data_total_size))
+    train_size = int(data_total_size * 0.8)
+    train_data = img_name_report.sample(n=train_size)
+    img_name_report.drop(list(train_data.index), inplace=True)
+    val_data = img_name_report
+    train_data.reset_index(level=0, inplace=True)
+    val_data.reset_index(level=0, inplace=True)
+    print('Training Data:{}'.format(len(train_data)))
+    print('Valdiation Data:{}'.format(len(val_data)))
+
+    # Data Loader
+    train_loader = get_loader(args.image_dir, vocab, train_data, 
                              transform, args.batch_size,
-                             shuffle=True, num_workers=args.num_workers) 
-    # Validation Data Loader
-    
+                             shuffle=True, num_workers=args.num_workers, split='Train') 
+    val_loader = get_loader(args.image_dir, vocab, val_data,
+                            transform, args.batch_size,
+                            shuffle=True, num_workers=args.num_workers, split='Val')
+
     
     # Build Models
     encoder = Encoder().to(device)
@@ -63,15 +84,13 @@ def main(args):
     encoder.train()
     decoder.train()
 
-    total_step = len(data_loader)
+    total_step = len(train_loader)
     # Train the models
     for epoch in range(args.num_epochs):
-        for i, (images, captions, lengths) in enumerate(data_loader):
+        for i, (images, captions, lengths) in enumerate(train_loader):
             
             images = images.to(device)
             captions = captions.to(device)
-            
-
 
             # 
             # Training
@@ -83,12 +102,10 @@ def main(args):
             # Ignore <start>
             targets = cap_sorted[:, 1:]
 
-
-            # Remove <pad>!!!!!!
+            # Remove <pad>
             scores = pack_padded_sequence(scores, decode_len, batch_first = True)[0]
             targets = pack_padded_sequence(targets, decode_len, batch_first = True)[0]
-
-             
+                         
             # optimization
             loss = criterion(scores, targets)
             decoder_optimizer.zero_grad()
@@ -101,53 +118,58 @@ def main(args):
 
             #
             #  Validation
-            #  bleu-4 = validation(val_loader, encoder, decoder, criterion, args)
+            #  
+            if i % args.validation_step == 0:
+                validation(val_loader, encoder, decoder, criterion)
             
 
             # Print log info
             if i % args.train_log_step == 0:
-                print('Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}, Perplexity: {:5.4f}'
+                print('[Training] -  Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}, Perplexity: {:5.4f}'
                       .format(epoch+1, args.num_epochs, i+1, total_step, loss.item(), np.exp(loss.item()))) 
                 
             # Save the model checkpoints
-            if (i+1) % args.save_step == 0:
-                torch.save(encoder.state_dict(), os.path.join(
-                    args.model_path, 'encoder-{}-{}.ckpt'.format(epoch+1, i+1)))
-                torch.save(decoder.state_dict(), os.path.join(
-                    args.model_path, 'decoder-{}-{}.ckpt'.format(epoch+1, i+1)))
+            #if (i+1) % args.save_step == 0:
+            #    torch.save(encoder.state_dict(), os.path.join(
+            #        args.model_path, 'encoder-{}-{}.ckpt'.format(epoch+1, i+1)))
+            #    torch.save(decoder.state_dict(), os.path.join(
+            #        args.model_path, 'decoder-{}-{}.ckpt'.format(epoch+1, i+1)))
                 
 
-def validation(val_loader, encoder, decoder, criterion, args):
+def validation(val_loader, encoder, decoder, criterion):
     """Perform validation on the validation set"""
-    encoder.eval()
+     
+    encoder.eval()  # no Dropout and BatchNorm
     decoder.eval()
     
-    references = list()
-    hypotheses = list()
-
+    references = list()  # true captions
+    hypotheses = list()  # predictions
 
     total_step = len(val_loader)
     with torch.no_grad():
         for i, (images, captions, lengths) in enumerate(val_loader):
             images = images.to(device)
-            captions = captions.to(device)
-            targets = pack_padded_sequence(captions, lengths, batch_first=True)[0]
+            captions = captions.to(device)            
             
-            
-            features = encoder(images)
-            scores = decoder(features, captions, lengths)
-            
-            
-            scores_copy = scores.clone()
+            encoded_img = encoder(images)
+            scores, cap_sorted, decode_len = decoder(encoded_img, captions, lengths)
+
+
+            # Ignore <start>
+            targets = cap_sorted[:, 1:]
+
+            # Remove <pad>
+            scores = pack_padded_sequence(scores, decode_len, batch_first = True)[0]
+            targets = pack_padded_sequence(targets, decode_len, batch_first = True)[0]
+
             # Calculate loss
-            loss = criterion(scores, captions)
+            loss = criterion(scores, targets)
             
             if i % args.validation_log_step == 0:
-                print('[Validation] - Step [{}/{}], Loss: {:.4f}, Perplexity: {:5.4f}'
+                print('     [Validation] - Step [{}/{}], Loss: {:.4f}, Perplexity: {:5.4f}'
                       .format( i+1, total_step, loss.item(), np.exp(loss.item()))) 
    
-    
-    print('[Done]\n')
+
     
             
             # create references
@@ -188,9 +210,12 @@ if __name__ == '__main__':
     
     # Log parameters
     parser.add_argument('--train_log_step', type=int , default=1, help='step size for prining training log info')
-    parser.add_argument('--validation_log_step', type=int , default=5, help='step size for prining validation log info')
+    parser.add_argument('--validation_step', type=int, default=5, help='step size to do validation')
+    parser.add_argument('--validation_log_step', type=int , default=10, help='step size for prining validation log info')
     parser.add_argument('--save_step', type=int , default=10000, help='step size for saving trained models')
     
+
+
     # Model parameters
     parser.add_argument('--embed_size', type=int , default=256, help='dimension of word embedding vectors')
     parser.add_argument('--hidden_size', type=int , default=512, help='dimension of lstm hidden states')
