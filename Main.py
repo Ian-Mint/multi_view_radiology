@@ -23,8 +23,12 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 def main(args):
     
     # GPU #
-    print('CUDA? ', torch.cuda.is_available(), ',  Running on GPU: ',torch.cuda.current_device())
-    
+    try:
+        print('CUDA? ', torch.cuda.is_available(), ',  Running on GPU: ', torch.cuda.current_device())
+    except AssertionError as e:  # will be raised if torch was not built with cuda
+        if 'NVIDIA' not in e.args[0]:
+            raise e
+
     # Create directory to save model
     if not os.path.exists(args.model_path):
         os.makedirs(args.model_path)

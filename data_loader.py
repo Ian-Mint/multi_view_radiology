@@ -5,12 +5,19 @@ Created on Mon Jan 27 15:22:15 2020
 @author: Alan
 """
 
-from PIL import Image
 import pandas as pd
 import os
 from torch.utils.data import Dataset
 import torch
 import nltk
+
+import config
+
+# Choose png or DICOM importer
+if config.img_extension == '.dcm':
+    import dicom_image as Image
+else:
+    from PIL import Image
 
 
 class OpenI(Dataset):
@@ -36,7 +43,7 @@ class OpenI(Dataset):
         caption = self.img_name_report.iloc[idx]['Findings']
         vocab = self.vocab
 
-        image = Image.open(os.path.join(self.root, path + '.png')).convert('RGB')
+        image = Image.open(os.path.join(self.root, path + config.img_extension)).convert('RGB')
         if self.transform:
             image = self.transform(image)
 
