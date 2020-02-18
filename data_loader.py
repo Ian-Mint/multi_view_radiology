@@ -44,7 +44,7 @@ class OpenI(Dataset):
         image_id = self.data.iloc[idx]['index']
         vocab = self.vocab
 
-        image = Image.open(os.path.join(self.root, path + config.img_extension)).convert('RGB')
+        image = Image.open(os.path.join(self.root, image_id + config.img_extension)).convert('RGB')
         if self.transform:
             image = self.transform(image)
 

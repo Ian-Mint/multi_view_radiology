@@ -136,3 +136,5 @@ data/
 
 # Pycharm artifacts
 .idea/
+
+logs/

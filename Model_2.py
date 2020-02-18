@@ -137,9 +137,6 @@ class Decoder(nn.Module):
             #h, c = self.decode_step(torch.cat([embeddings[:batch_size_t, t, :], attention_weighted_encoding], dim=1),
             #                        (h[:batch_size_t], c[:batch_size_t]))  # (batch_size_t, decoder_dim)
          
-            #print(embeddings[:batch_size_t, t,:].shape)
-            #print(encoder_out[:batch_size_t].sum(dim=1).shape)
-
 
             h, c = self.decode_step(torch.cat([embeddings[:batch_size_t, t, :], encoder_out[:batch_size_t].sum(dim=1)],dim =1),
                                     (h[:batch_size_t], c[:batch_size_t]))
