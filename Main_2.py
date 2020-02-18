@@ -52,6 +52,10 @@ def main(args):
     # Split data into 'Train', 'Validate'
 
     img_name_report = pd.read_csv(args.img_report_path)
+    # TODO: parameterize or remove for real training
+    img_indices = np.random.choice(img_name_report.index, size=10, replace=False)
+    img_name_report = img_name_report.loc[img_indices]
+
     data_total_size = len(img_name_report)
     print('Data Total Size:{}'.format(data_total_size))
     train_size = int(data_total_size * 0.8)
