@@ -10,8 +10,11 @@ import os
 import xml.etree.ElementTree as ET
 import pandas as pd
 
+import config
+
+
 Img_Findings = {}
-report_path = '../data/ecgen-radiology/'
+report_path = config.data_dir
 for filename in os.listdir(report_path):
     print('Processing {}'.format(filename))
 

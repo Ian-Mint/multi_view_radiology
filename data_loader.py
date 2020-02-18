@@ -5,16 +5,23 @@ Created on Mon Jan 27 15:22:15 2020
 @author: Alan
 """
 
-from PIL import Image
 import pandas as pd
 import os
 from torch.utils.data import Dataset
 import torch
 import nltk
 
+import config
+
+# Choose png or DICOM importer
+if config.img_extension == '.dcm':
+    import dicom_image as Image
+else:
+    from PIL import Image
+
 
 class OpenI(Dataset):
-    def __init__(self, root, vocab, img_name_report, transform=None):
+    def __init__(self, root, vocab, img_name_report, split, transform=None):
         """Set the path for images, captions and vocabulary wrapper.
         
         Args:
@@ -26,17 +33,18 @@ class OpenI(Dataset):
 
         self.root = root
         self.vocab = vocab
-        self.img_name_report = img_name_report
+        self.data = img_name_report
         self.transform = transform
+        self.split = split
 
     def __getitem__(self, idx):
         """Returns one data pair (image and caption)."""
-
-        path = self.img_name_report.iloc[idx]['index']
-        caption = self.img_name_report.iloc[idx]['Findings']
+        
+        caption = self.data.iloc[idx]['Findings']
+        image_id = self.data.iloc[idx]['index']
         vocab = self.vocab
 
-        image = Image.open(os.path.join(self.root, path + '.png')).convert('RGB')
+        image = Image.open(os.path.join(self.root, image_id + config.img_extension)).convert('RGB')
         if self.transform:
             image = self.transform(image)
 
@@ -46,11 +54,12 @@ class OpenI(Dataset):
         caption.extend([vocab(token) for token in tokens])
         caption.append(vocab('<end>'))
         target = torch.tensor(caption)
+        
 
         return image, target
 
     def __len__(self):
-        return len(self.vocab)
+        return len(self.data)
 
 
 def collate_fn(data):
@@ -70,21 +79,24 @@ def collate_fn(data):
         cap_end = lengths[idx]
         targets[idx, :cap_end] = cap[:cap_end]
 
+    lengths = torch.tensor(lengths)
+
     return images, targets, lengths
 
 
-def get_loader(root, vocab, img_report_path, transform, batch_size, shuffle, num_workers):
+def get_loader(root, vocab, img_report, transform, batch_size, shuffle, num_workers,split):
     """Returns torch.utils.data.DataLoader for Open-i dataset."""
-    
-    img_findings = pd.read_csv(img_report_path)
+
     open_i = OpenI(root=root,
                    vocab=vocab,
-                   img_name_report=img_findings,
+                   img_name_report=img_report,
+                   split=split,
                    transform=transform)
 
     data_loader = torch.utils.data.DataLoader(dataset=open_i,
                                               batch_size=batch_size,
                                               shuffle=shuffle,
                                               num_workers=num_workers,
-                                              collate_fn=collate_fn)
+                                              collate_fn=collate_fn,
+                                              pin_memory = True)
     return data_loader
