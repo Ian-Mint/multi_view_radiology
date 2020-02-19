@@ -25,7 +25,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def main(args):
     
-    ts = time.strftime('%Y-%b-%d-%H:%M:%S', time.gmtime())
+    ts = time.strftime('%Y-%b-%d-%H.%M.%S', time.gmtime())
 
     # GPU 
     if torch.cuda.is_available():
