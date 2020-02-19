@@ -18,6 +18,7 @@ from tensorboardX import SummaryWriter
 from torch.nn.utils.rnn import pack_padded_sequence
 from nltk.translate.bleu_score import corpus_bleu, sentence_bleu, SmoothingFunction
 from vocabulary import Vocabulary
+from utils import *
 import pandas as pd
 import time
 
@@ -52,6 +53,7 @@ def main(args):
     # Split data into 'Train', 'Validate'
 
     img_name_report = pd.read_csv(args.img_report_path)
+    
     data_total_size = len(img_name_report)
     print('Data Total Size:{}'.format(data_total_size))
     train_size = int(data_total_size * 0.8)
@@ -118,6 +120,13 @@ def main(args):
             decoder_optimizer.zero_grad()
             encoder_optimizer.zero_grad()
             loss.backward()
+
+
+            # Clip gradients
+            if args.grad_clip is not None:
+                clip_gradient(decoder_optimizer, args.grad_clip)
+                clip_gradient(encoder_optimizer, args.grad_clip)
+
             
             # update weights
             decoder_optimizer.step()
@@ -298,6 +307,7 @@ if __name__ == '__main__':
     parser.add_argument('--log_dir',type=str, default='logs',help='path for saving logs')
 
     # Model parameters
+    parser.add_argument('--grad_clip', type=int, default=5, help='values for gradient clipping')
     parser.add_argument('--embed_size', type=int , default=256, help='dimension of word embedding vectors')
     parser.add_argument('--hidden_size', type=int , default=512, help='dimension of lstm hidden states')
     parser.add_argument('--num_layers', type=int , default=1, help='number of layers in LSTM')
