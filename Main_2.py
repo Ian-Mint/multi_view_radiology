@@ -40,6 +40,7 @@ def main(args):
         
     # Image Preprocessing
     transform = transforms.Compose([ 
+        transforms.Resize(args.resize_size),
         transforms.RandomCrop(args.crop_size),
         transforms.RandomHorizontalFlip(), 
         transforms.ToTensor(), 
@@ -54,7 +55,7 @@ def main(args):
 
     img_name_report = pd.read_csv(args.img_report_path)
     # TODO: parameterize or remove for real training
-    img_indices = np.random.choice(img_name_report.index, size=10, replace=False)
+    img_indices = np.random.choice(img_name_report.index, size=100, replace=False)
     img_name_report = img_name_report.loc[img_indices]
 
     data_total_size = len(img_name_report)
@@ -295,6 +296,7 @@ if __name__ == '__main__':
     # Path
     parser.add_argument('--model_path', type=str, default='models/' , help='path for saving trained models')
     parser.add_argument('--crop_size', type=int, default=224 , help='size for randomly cropping images')
+    parser.add_argument('--resize_size', type=int, default=256, help='size for resizing the image')
     parser.add_argument('--vocab_path', type=str, default='vocab.pkl', help='path for vocabulary wrapper')
     parser.add_argument('--img_report_path', type=str, default='data/Img_Report.csv', help='path for img name vs findings')
     parser.add_argument('--image_dir', type=str, default='data/png', help='directory for resized images')
@@ -310,12 +312,12 @@ if __name__ == '__main__':
     parser.add_argument('--log_dir',type=str, default='logs',help='path for saving logs')
 
     # Model parameters
-    parser.add_argument('--grad_clip', type=int, default=5, help='values for gradient clipping')
-    parser.add_argument('--embed_size', type=int , default=256, help='dimension of word embedding vectors')
+    parser.add_argument('--grad_clip', type=float, default=0.35, help='values for gradient clipping')
+    parser.add_argument('--embed_size', type=int , default=512, help='dimension of word embedding vectors')
     parser.add_argument('--hidden_size', type=int , default=512, help='dimension of lstm hidden states')
     parser.add_argument('--num_layers', type=int , default=1, help='number of layers in LSTM')
     
-    parser.add_argument('--num_epochs', type=int, default=30)
+    parser.add_argument('--num_epochs', type=int, default=50)
     parser.add_argument('--train_batch_size', type=int, default=128)
     parser.add_argument('--val_batch_size', type=int, default=128)
     parser.add_argument('--num_workers', type=int, default=0)
