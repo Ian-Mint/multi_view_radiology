@@ -6,8 +6,10 @@ Created on Mon Jan 27 15:22:15 2020
 """
 
 import pandas as pd
+import numpy as np
 import os
 from torch.utils.data import Dataset
+from scipy.misc import imread, imresize
 import torch
 import nltk
 
@@ -43,10 +45,23 @@ class OpenI(Dataset):
         caption = self.data.iloc[idx]['Findings']
         image_id = self.data.iloc[idx]['index']
         vocab = self.vocab
+        
+        
+        img = imread(os.path.join(self.root, image_id + config.img_extension))
+        if len(img.shape) == 2:
+            img = img[:, :, np.newaxis]
+            img = np.concatenate([img, img, img], axis=2)
+        img = imresize(img, (256, 256))
+        img = img.transpose(2, 0, 1)
+        
+        img = torch.FloatTensor(img / 255.)
+        if self.transform is not None:
+            img = self.transform(img)
 
-        image = Image.open(os.path.join(self.root, image_id + config.img_extension)).convert('RGB')
-        if self.transform:
-            image = self.transform(image)
+        #image = Image.open(os.path.join(self.root, image_id + config.img_extension)).convert('RGB')
+        #if self.transform:
+        #    image = self.transform(image)
+        #image = image/255.
 
         tokens = nltk.tokenize.word_tokenize(str(caption).lower())
         caption = []
@@ -56,7 +71,7 @@ class OpenI(Dataset):
         target = torch.tensor(caption)
         
 
-        return image, target
+        return img, target
 
     def __len__(self):
         return len(self.data)

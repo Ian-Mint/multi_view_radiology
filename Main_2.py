@@ -39,14 +39,11 @@ def main(args):
         os.makedirs(args.model_path)
         
     # Image Preprocessing
-    transform = transforms.Compose([ 
-        transforms.Resize(args.resize_size),
-        transforms.RandomCrop(args.crop_size),
-        transforms.RandomHorizontalFlip(), 
-        transforms.ToTensor(), 
+    transform = transforms.Compose([
         transforms.Normalize((0.485, 0.456, 0.406), 
-                             (0.229, 0.224, 0.225))])
-
+                             (0.229, 0.224, 0.225))]
+    )
+    
     # Load vocabulary wrapper
     with open(args.vocab_path, 'rb') as f:
         vocab = pickle.load(f)
@@ -55,7 +52,7 @@ def main(args):
 
     img_name_report = pd.read_csv(args.img_report_path)
     # TODO: parameterize or remove for real training
-    img_indices = np.random.choice(img_name_report.index, size=100, replace=False)
+    img_indices = np.random.choice(img_name_report.index, size=10, replace=False)
     img_name_report = img_name_report.loc[img_indices]
 
     data_total_size = len(img_name_report)
@@ -115,10 +112,15 @@ def main(args):
             # Ignore <start>
             targets = cap_sorted[:, 1:]
 
+            score_copy = scores.clone()
+            _, preds = torch.max(scores, dim=2)
+
             # Remove <pad>
             scores = pack_padded_sequence(scores, decode_len, batch_first = True)[0]
             targets = pack_padded_sequence(targets, decode_len, batch_first = True)[0]
                          
+
+           
             # optimization
             loss = criterion(scores, targets)
             decoder_optimizer.zero_grad()
@@ -318,8 +320,8 @@ if __name__ == '__main__':
     parser.add_argument('--num_layers', type=int , default=1, help='number of layers in LSTM')
     
     parser.add_argument('--num_epochs', type=int, default=50)
-    parser.add_argument('--train_batch_size', type=int, default=128)
-    parser.add_argument('--val_batch_size', type=int, default=128)
+    parser.add_argument('--train_batch_size', type=int, default=32)
+    parser.add_argument('--val_batch_size', type=int, default=32)
     parser.add_argument('--num_workers', type=int, default=0)
     parser.add_argument('--encoder_lr', type=float, default=0.0001)
     parser.add_argument('--decoder_lr', type=float, default=0.0004)
