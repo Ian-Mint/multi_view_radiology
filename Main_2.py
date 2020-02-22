@@ -11,43 +11,47 @@ import torch.nn as nn
 import numpy as np
 import os
 from torchvision import transforms
-from Model_2 import Encoder, Decoder
-from data_loader import get_loader
+from Model_2 import Encoder, DecoderWithAttention
+from data_loader import *
 import pickle
 from tensorboardX import SummaryWriter
 from torch.nn.utils.rnn import pack_padded_sequence
-from nltk.translate.bleu_score import corpus_bleu, sentence_bleu, SmoothingFunction
-from vocabulary import Vocabulary
+from nltk.translate.bleu_score import corpus_bleu
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 from utils import *
-import pandas as pd
 import time
 
+start_epoch = 0
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+epochs_since_improvement = 0  # keeps track of number of epochs since there's been an improvement in 
+best_bleu4 = 0.  # BLEU-4 score right now
+fine_tune_encoder = True  # fine-tune encoder?
+checkpoint = None 
+
 
 def main(args):
     
     global best_bleu4, epochs_since_improvement, checkpoint, start_epoch, fine_tune_encoder, data_name, word_map
     
     # Read word map
-    word_map_file = os.path.join(
-        , 'WORDMAP_' + data_name + '.json')
+    word_map_file = os.path.join(args.data_folder, 'WORDMAP_' + args.data_name + '.json')
     with open(word_map_file, 'r') as j:
         word_map = json.load(j)
     
     
     # Initialize / load checkpoint
-    if checkpoint == False:
-        decoder = DecoderWithAttention(attention_dim=attention_dim,
-                                       embed_dim=emb_dim,
-                                       decoder_dim=decoder_dim,
+    if checkpoint is None:
+        decoder = DecoderWithAttention(attention_dim=args.attention_dim,
+                                       embed_dim=args.emb_dim,
+                                       decoder_dim=args.decoder_dim,
                                        vocab_size=len(word_map),
-                                       dropout=dropout)
+                                       dropout=args.dropout)
         decoder_optimizer = torch.optim.Adam(params=filter(lambda p: p.requires_grad, decoder.parameters()),
-                                             lr=decoder_lr)
+                                             lr=args.decoder_lr)
         encoder = Encoder()
         encoder.fine_tune(fine_tune_encoder)
         encoder_optimizer = torch.optim.Adam(params=filter(lambda p: p.requires_grad, encoder.parameters()),
-                                             lr=encoder_lr) if fine_tune_encoder else None
+                                             lr=args.encoder_lr) if fine_tune_encoder else None
 
 
     else:
@@ -62,7 +66,7 @@ def main(args):
         if fine_tune_encoder is True and encoder_optimizer is None:
             encoder.fine_tune(fine_tune_encoder)
             encoder_optimizer = torch.optim.Adam(params=filter(lambda p: p.requires_grad, encoder.parameters()),
-                                                 lr=encoder_lr)
+                                                 lr=args.encoder_lr)
     
 
     # GPU 
@@ -91,15 +95,15 @@ def main(args):
                                      std=[0.229, 0.224, 0.225])
     
     train_loader = torch.utils.data.DataLoader(
-        OpenI(data_folder, data_name, 'TRAIN', transform=transforms.Compose([normalize])),
-        batch_size=batch_size, shuffle=True, pin_memory=True)
+        OpenI(args.data_folder, args.data_name, 'TRAIN', transform=transforms.Compose([normalize])),
+        batch_size=args.batch_size, shuffle=True, pin_memory=True)
     val_loader = torch.utils.data.DataLoader(
-        OpenI(data_folder, data_name, 'VAL', transform=transforms.Compose([normalize])),
-        batch_size=batch_size, shuffle=True, pin_memory=True)
+        OpenI(args.data_folder, args.data_name, 'VAL', transform=transforms.Compose([normalize])),
+        batch_size=args.batch_size, shuffle=True, pin_memory=True)
     
-    
+   
      # Epochs
-    for epoch in range(start_epoch, epochs):
+    for epoch in range(start_epoch, args.epochs):
 
         # Decay learning rate if there is no improvement for 8 consecutive epochs, and terminate training after 20
         if epochs_since_improvement == 20:
@@ -110,7 +114,8 @@ def main(args):
                 adjust_learning_rate(encoder_optimizer, 0.5)
 
         # One epoch's training
-        train(train_loader=train_loader,
+        train(args,
+              train_loader=train_loader,
               encoder=encoder,
               decoder=decoder,
               criterion=criterion,
@@ -124,8 +129,9 @@ def main(args):
                                 decoder=decoder,
                                 criterion=criterion)
 
-        recent_real_bleu4 = evaluate(3,'VAL',encoder=encoder,decoder=decoder,word_map=word_map)[3]
+        recent_real_bleu4 = evaluate(args, 3,'VAL',encoder=encoder,decoder=decoder,word_map=word_map)[3]
         print("real_bleu4_is:"+recent_real_bleu4)
+        
         # Check if there was an improvement
         is_best = recent_real_bleu4 > best_bleu4
         best_bleu4 = max(recent_real_bleu4, best_bleu4)
@@ -136,11 +142,11 @@ def main(args):
             epochs_since_improvement = 0
 
         # Save checkpoint
-        save_checkpoint(data_name, epoch, epochs_since_improvement, encoder, decoder, encoder_optimizer,
+        save_checkpoint(args.data_name, epoch, epochs_since_improvement, encoder, decoder, encoder_optimizer,
                         decoder_optimizer, recent_real_bleu4, is_best)
 
 
-def train(train_loader, encoder, decoder, criterion, encoder_optimizer, decoder_optimizer, epoch):
+def train(args, train_loader, encoder, decoder, criterion, encoder_optimizer, decoder_optimizer, epoch):
     """
     Performs one epoch's training.
 
@@ -188,7 +194,7 @@ def train(train_loader, encoder, decoder, criterion, encoder_optimizer, decoder_
         loss = criterion(scores.data, targets.data)
 
         # Add doubly stochastic attention regularization
-        loss += alpha_c * ((1. - alphas.sum(dim=1)) ** 2).mean()
+        loss += args.alpha_c * ((1. - alphas.sum(dim=1)) ** 2).mean()
 
         # Back prop.
         decoder_optimizer.zero_grad()
@@ -198,10 +204,10 @@ def train(train_loader, encoder, decoder, criterion, encoder_optimizer, decoder_
         loss.backward()
 
         # Clip gradients
-        if grad_clip is not None:
-            clip_gradient(decoder_optimizer, grad_clip)
+        if args.grad_clip is not None:
+            clip_gradient(decoder_optimizer, args.grad_clip)
             if encoder_optimizer is not None:
-                clip_gradient(encoder_optimizer, grad_clip)
+                clip_gradient(encoder_optimizer, args.grad_clip)
 
         # Update weights
         decoder_optimizer.step()
@@ -217,7 +223,7 @@ def train(train_loader, encoder, decoder, criterion, encoder_optimizer, decoder_
         start = time.time()
 
         # Print status
-        if i % print_freq == 0:
+        if i % args.print_freq == 0:
             print('Epoch: [{0}][{1}/{2}]\t'
                   'Batch Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'Data Load Time {data_time.val:.3f} ({data_time.avg:.3f})\t'
@@ -229,7 +235,7 @@ def train(train_loader, encoder, decoder, criterion, encoder_optimizer, decoder_
 
 
 
-def validate(val_loader, encoder, decoder, criterion):
+def validate(args,val_loader, encoder, decoder, criterion):
     """
     Performs one epoch's validation.
 
@@ -291,7 +297,7 @@ def validate(val_loader, encoder, decoder, criterion):
 
             start = time.time()
 
-            if i % print_freq == 0:
+            if i % args.print_freq == 0:
                 print('Validation: [{0}/{1}]\t'
                       'Batch Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                       'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
@@ -333,7 +339,7 @@ def validate(val_loader, encoder, decoder, criterion):
 
     return bleu4
 
-def evaluate(beam_size,split,encoder,decoder,word_map):
+def evaluate(args, beam_size,split,encoder,decoder,word_map):
     """
     Evaluation
 
@@ -344,8 +350,9 @@ def evaluate(beam_size,split,encoder,decoder,word_map):
     vocab_size = len(word_map)
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                      std=[0.229, 0.224, 0.225])
+    
     loader = torch.utils.data.DataLoader(
-        CaptionDataset(data_folder, data_name, split=split, transform=transforms.Compose([normalize])),
+        OpenI(args.data_folder, args.data_name, split=split, transform=transforms.Compose([normalize])),
         batch_size=1, shuffle=True, num_workers=0, pin_memory=True)
 
 
@@ -492,8 +499,6 @@ if __name__ == '__main__':
     
     # log 
     parser.add_argument('--print_freq', type=int, default=10)
-    parser.add_argument('--checkpoint', type=bool, default=False)
-    parser.add_argument('--print_freq', type=int, default=10)
        
     # Model Parameters
     parser.add_argument('--emb_dim', type=int, default=512)
@@ -502,16 +507,14 @@ if __name__ == '__main__':
     
     # Training Parameters
     parser.add_argument('--epochs', type=int, default=50)
-    parser.add_argument('--epochs_since_improvement', type=int, default=0)
     parser.add_argument('--batch_size', type=int, default=32)
     parser.add_argument('--num_workers', type=int, default=1)
     parser.add_argument('--encoder_lr', type=float, default=0.0001)
     parser.add_argument('--decoder_lr', type=float, default=0.0004)
     parser.add_argument('--dropout', type=float, default=0.5)
     parser.add_argument('--grad_clip', type=int, default=5, help = 'clip gradients at an absolute value of')
-    parser.add_argument('--alpha_c', type=int, default=1, help = ' regularization parameter for doubly stochastic attention, as in the paper
-')
-    parser.add_argument('--best_bleu4', type=int, default=0)
+    parser.add_argument('--alpha_c', type=int, default=1, help = 'regularization parameter for doubly stochastic attention, as in the paper')
+
     
     args = parser.parse_args()
     main(args)

@@ -55,7 +55,7 @@ class OpenI(Dataset):
         
         
 
-    def __getitem__(self, idx):
+    def __getitem__(self, i):
         """Returns one data pair (image and caption)."""
         
         img = torch.FloatTensor(self.imgs[i // self.cpi] / 255.)
