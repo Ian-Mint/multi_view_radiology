@@ -20,6 +20,7 @@ from nltk.translate.bleu_score import corpus_bleu
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from utils import *
 import time
+import torch.nn.functional as F
 
 start_epoch = 0
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -30,6 +31,8 @@ checkpoint = None
 
 
 def main(args):
+    
+    ts = time.strftime('%Y-%b-%d-%H.%M.%S', time.gmtime())
     
     global best_bleu4, epochs_since_improvement, checkpoint, start_epoch, fine_tune_encoder, data_name, word_map
     
@@ -86,6 +89,12 @@ def main(args):
     # Move to GPU, if available
     decoder = decoder.to(device)
     encoder = encoder.to(device)
+    
+    
+    # TensorBoard
+    writer = SummaryWriter(os.path.join(args.log_dir, ts))
+    writer.add_text("args", str(args))
+    
 
     # Loss function
     criterion = nn.CrossEntropyLoss().to(device)
@@ -114,7 +123,7 @@ def main(args):
                 adjust_learning_rate(encoder_optimizer, 0.5)
 
         # One epoch's training
-        train(args,
+        train(args, writer,
               train_loader=train_loader,
               encoder=encoder,
               decoder=decoder,
@@ -124,14 +133,21 @@ def main(args):
               epoch=epoch)
 
         # One epoch's validation
-        recent_bleu4 = validate(val_loader=val_loader,
-                                encoder=encoder,
-                                decoder=decoder,
-                                criterion=criterion)
+        recent_bleu4, loss_val = validate(args, 
+                                        val_loader=val_loader,
+                                        encoder=encoder,
+                                        decoder=decoder,
+                                        criterion=criterion)
+        writer.add_scalar("Val Bleu4", recent_bleu4, epoch)
+        writer.add_scalar("Val Loss", loss_val, epoch)
+        
+        
 
         recent_real_bleu4 = evaluate(args, 3,'VAL',encoder=encoder,decoder=decoder,word_map=word_map)[3]
-        print("real_bleu4_is:"+recent_real_bleu4)
+        print("real bleu4 is:", recent_real_bleu4)
+        writer.add_scalar("Real Val Bleu4", recent_real_bleu4, epoch)
         
+
         # Check if there was an improvement
         is_best = recent_real_bleu4 > best_bleu4
         best_bleu4 = max(recent_real_bleu4, best_bleu4)
@@ -146,7 +162,7 @@ def main(args):
                         decoder_optimizer, recent_real_bleu4, is_best)
 
 
-def train(args, train_loader, encoder, decoder, criterion, encoder_optimizer, decoder_optimizer, epoch):
+def train(args, writer, train_loader, encoder, decoder, criterion, encoder_optimizer, decoder_optimizer, epoch):
     """
     Performs one epoch's training.
 
@@ -221,6 +237,8 @@ def train(args, train_loader, encoder, decoder, criterion, encoder_optimizer, de
         batch_time.update(time.time() - start)
 
         start = time.time()
+        
+        writer.add_scalar("Train Loss", losses.val , epoch* len(train_loader) + i)
 
         # Print status
         if i % args.print_freq == 0:
@@ -235,7 +253,7 @@ def train(args, train_loader, encoder, decoder, criterion, encoder_optimizer, de
 
 
 
-def validate(args,val_loader, encoder, decoder, criterion):
+def validate(args, val_loader, encoder, decoder, criterion):
     """
     Performs one epoch's validation.
 
@@ -287,7 +305,7 @@ def validate(args,val_loader, encoder, decoder, criterion):
             loss = criterion(scores, targets)
 
             # Add doubly stochastic attention regularization
-            loss += alpha_c * ((1. - alphas.sum(dim=1)) ** 2).mean()
+            loss += args.alpha_c * ((1. - alphas.sum(dim=1)) ** 2).mean()
 
             # Keep track of metrics
             losses.update(loss.item(), sum(decode_lengths))
@@ -296,6 +314,7 @@ def validate(args,val_loader, encoder, decoder, criterion):
             batch_time.update(time.time() - start)
 
             start = time.time()
+           
 
             if i % args.print_freq == 0:
                 print('Validation: [{0}/{1}]\t'
@@ -337,7 +356,7 @@ def validate(args,val_loader, encoder, decoder, criterion):
                 top5=top5accs,
                 bleu=bleu4))
 
-    return bleu4
+    return bleu4, losses.val
 
 def evaluate(args, beam_size,split,encoder,decoder,word_map):
     """
@@ -499,6 +518,7 @@ if __name__ == '__main__':
     
     # log 
     parser.add_argument('--print_freq', type=int, default=10)
+    parser.add_argument('--log_dir',type=str, default='logs',help='path for saving logs')
        
     # Model Parameters
     parser.add_argument('--emb_dim', type=int, default=512)
@@ -506,8 +526,8 @@ if __name__ == '__main__':
     parser.add_argument('--decoder_dim', type=int, default=512)
     
     # Training Parameters
-    parser.add_argument('--epochs', type=int, default=50)
-    parser.add_argument('--batch_size', type=int, default=32)
+    parser.add_argument('--epochs', type=int, default=150)
+    parser.add_argument('--batch_size', type=int, default=48)
     parser.add_argument('--num_workers', type=int, default=1)
     parser.add_argument('--encoder_lr', type=float, default=0.0001)
     parser.add_argument('--decoder_lr', type=float, default=0.0004)
