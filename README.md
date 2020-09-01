@@ -2,23 +2,19 @@
 
 ## File Structure
 ```
-Root
-|
-+----Preprocess                       Saved data 
-|   | Data_Processing_Open_i.py
-|   
-+----data                       Saved data 
-|   | png
-|   | ecgen-radiology
-|   
-+----Main.py  
-|
-+----Model.py
-|
-+----data_loader.py
-|
-+----vocabulary.py
-+----vocab.pkl
+.
+├── config_template.py
+├── data_loader.py
+├── dicom_image.py
+├── main.py
+├── model.py
+├── preprocessing
+│   └── Data_Processing_Open_i.py
+├── README.md
+├── test
+│   └── test_data_loader.py
+├── vocab.pkl
+└── vocabulary.py
 ```
 ## Preprocessing for Open-i dataset
 **Data_Preproceesing_Open_i.py** has to be placed within Open_i dataset folder to generate .csv file
