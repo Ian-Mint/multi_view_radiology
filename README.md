@@ -1,4 +1,4 @@
-# multi_view_radiology
+# Multi-view chest x-ray report generation
 
 The generation of radiology reports is a costly and time-consuming endeavor that is to a small degree, prone to error and inconsistency. To address these issues, we aim to generate these reports automatically, directly from the pixels of chest x-rays. Our contribution is to combine multiple x-ray views to produce a single report, utilizing all available information. Our method was evaluated on the IU X-Ray dataset.
 
