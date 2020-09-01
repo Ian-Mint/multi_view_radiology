@@ -11,7 +11,7 @@ import torch.nn as nn
 import numpy as np
 import os
 from torchvision import transforms
-from Model_2 import Encoder, Decoder
+from model import Encoder, Decoder
 from data_loader import get_loader
 import pickle
 from torch.nn.utils.rnn import pack_padded_sequence
