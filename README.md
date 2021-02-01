@@ -26,7 +26,7 @@ The generation of radiology reports is a costly and time-consuming endeavor that
 
 ## Execution
 ```bash
-$python Main.py
+$python main.py
 ```
 
 ## Reading DICOM files
